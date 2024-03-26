@@ -1,6 +1,7 @@
 package io.meraklis.icare.processors;
 
 import io.meraklis.icare.applications.PatientApplicationType;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.interactive.form.PDCheckBox;
@@ -18,6 +19,7 @@ import java.util.stream.Collectors;
 import static io.meraklis.icare.helpers.Helpers.tmpFile;
 import static io.meraklis.icare.processors.DocumentHelper.*;
 
+@Slf4j
 abstract class AbstractApplicationProcessor implements ApplicationProcessor {
 
     @Autowired
@@ -151,54 +153,59 @@ abstract class AbstractApplicationProcessor implements ApplicationProcessor {
     }
 
     protected void assignValues(PDDocument doc, Map<String, Object> metadata) throws IOException {
-        for (Map.Entry<String, Object> entry : metadata.entrySet()) {
-            List<String> pdfFieldNames = findPdfFieldName(entry);
+        String metadataKey = null;
+        try {
+            for (Map.Entry<String, Object> entry : metadata.entrySet()) {
+                List<String> pdfFieldNames = findPdfFieldName(entry);
 
-            String metadataKey = entry.getKey();
+                metadataKey = entry.getKey();
 
-            if (pdfFieldNames == null && entry.getValue() instanceof ArrayList<?>) {
-                continue;
-            }
-
-            if (isDerivedField(metadataKey)) {
-                setDerivedField(doc, metadata, metadataKey);
-                continue;
-            }
-
-            if (pdfFieldNames == null) {
-                setField(doc, metadataKey, (String) entry.getValue());
-                continue;
-            }
-
-            if (multiCheckBoxFields().contains(metadataKey)) {
-                for (String checkBoxField : pdfFieldNames) {
-                    setField(doc, checkBoxField, CHECK);
+                if (pdfFieldNames == null && entry.getValue() instanceof ArrayList<?>) {
+                    continue;
                 }
-                continue;
-            }
 
-            String value;
-            for (String pdfFieldName : pdfFieldNames) {
-                if (pdfFieldName != null) {
-                    if (isRadioField(entry)) {
-                        Integer v = (Integer) entry.getValue();
-                        value = radioChoices.get(v);
-                    } else if (isDateField(pdfFieldName)) {
-                        value = (String) entry.getValue();
-                        value = LocalDate.parse(value).format(formatter);
-                    } else if (isSingleCheckBoxField(metadataKey)) {
-                        if ((Boolean) entry.getValue()) {
-                            value = CHECK;
-                        } else {
-                            continue;
-                        }
-                    } else {
-                        value = (String) entry.getValue();
+                if (isDerivedField(metadataKey)) {
+                    setDerivedField(doc, metadata, metadataKey);
+                    continue;
+                }
+
+                if (pdfFieldNames == null) {
+                    setField(doc, metadataKey, (String) entry.getValue());
+                    continue;
+                }
+
+                if (multiCheckBoxFields().contains(metadataKey)) {
+                    for (String checkBoxField : pdfFieldNames) {
+                        setField(doc, checkBoxField, CHECK);
                     }
+                    continue;
+                }
 
-                    setField(doc, pdfFieldName, value);
+                String value;
+                for (String pdfFieldName : pdfFieldNames) {
+                    if (pdfFieldName != null) {
+                        if (isRadioField(entry)) {
+                            Integer v = (Integer) entry.getValue();
+                            value = radioChoices.get(v);
+                        } else if (isDateField(pdfFieldName)) {
+                            value = (String) entry.getValue();
+                            value = LocalDate.parse(value).format(formatter);
+                        } else if (isSingleCheckBoxField(metadataKey)) {
+                            if ((Boolean) entry.getValue()) {
+                                value = CHECK;
+                            } else {
+                                continue;
+                            }
+                        } else {
+                            value = (String) entry.getValue();
+                        }
+
+                        setField(doc, pdfFieldName, value);
+                    }
                 }
             }
+        } catch (Exception ex) {
+            log.error("Error: Metadata key {} could not be assigned", metadataKey);
         }
     }
 
